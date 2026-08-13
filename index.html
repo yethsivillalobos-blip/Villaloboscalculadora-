@@ -214,19 +214,35 @@ async function fetchBCV() {
     const res = await fetch('https://bcv.today/api/v1/rate.json', { cache: 'no-cache' });
     if (!res.ok) throw new Error('http ' + res.status);
     const data = await res.json();
-    // El JSON tiene: { usd: { rate: 764.34, date: "2026-08-12" }, ... }
     const rate = data?.usd?.rate ?? data?.USD?.rate ?? data?.rate ?? null;
     if (!rate || isNaN(rate)) throw new Error('formato inesperado');
+    
     tasaBCV = parseFloat(rate);
     const fecha = data?.usd?.date ?? data?.USD?.date ?? '';
+    
+    // Almacenamos en caché local para emergencias de conectividad
+    localStorage.setItem('tasaBCV_cache', tasaBCV);
+    localStorage.setItem('tasaBCV_fecha', fecha);
+    
     badge.className = 'bcv-badge';
     txt.innerHTML = '<strong>Bs ' + tasaBCV.toFixed(2) + '</strong> / $1';
     document.getElementById('tasaRef').textContent = 'BCV oficial' + (fecha ? ' · ' + fecha : '');
   } catch(e) {
-    badge.className = 'bcv-badge error';
-    txt.innerHTML = 'Sin tasa — <button class="refresh-link" onclick="fetchBCV()">reintentar</button>';
-    tasaBCV = null;
-    document.getElementById('tasaRef').textContent = 'tasa BCV no disponible';
+    // Si falla la red o el servicio, recuperamos la última tasa guardada
+    const tasaGuardada = localStorage.getItem('tasaBCV_cache');
+    const fechaGuardada = localStorage.getItem('tasaBCV_fecha');
+    
+    if (tasaGuardada) {
+      tasaBCV = parseFloat(tasaGuardada);
+      badge.className = 'bcv-badge';
+      txt.innerHTML = '<strong>Bs ' + tasaBCV.toFixed(2) + '</strong> <small>(Guardada)</small>';
+      document.getElementById('tasaRef').textContent = 'Última tasa' + (fechaGuardada ? ' · ' + fechaGuardada : '');
+    } else {
+      badge.className = 'bcv-badge error';
+      txt.innerHTML = 'Sin tasa — <button class="refresh-link" onclick="fetchBCV()">reintentar</button>';
+      tasaBCV = null;
+      document.getElementById('tasaRef').textContent = 'tasa BCV no disponible';
+    }
   }
   calcular();
 }
