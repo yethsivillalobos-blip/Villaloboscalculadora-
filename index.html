@@ -33,8 +33,8 @@
   .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:10px}
   .page-title{font-size:22px;font-weight:500;display:flex;align-items:center;gap:8px}
   .page-title i{font-size:22px;color:var(--text-accent)}
-  .bcv-badge{display:flex;align-items:center;gap:6px;background:var(--bg-success);border:0.5px solid var(--border-success);border-radius:var(--radius);padding:6px 12px;font-size:13px;color:var(--text-success);transition:all .3s;cursor:default}
-  .bcv-badge.loading{background:var(--bg-warning);border-color:var(--border-warning);color:var(--text-warning)}
+  .bcv-badge{display:flex;align-items:center;gap:6px;background:var(--bg-success);border:0.5px solid var(--border-success);border-radius:var(--radius);padding:6px 12px;font-size:13px;color:var(--text-success);transition:all .3s;cursor:pointer}
+  .bcv-badge.loading{background:var(--bg-warning);border-color:var(--border-warning);color:var(--text-warning);cursor:default}
   .bcv-badge.error{background:var(--bg-danger);border-color:var(--border-danger);color:var(--text-danger)}
   .bcv-badge i{font-size:15px}
   .section{background:var(--surface-2);border:0.5px solid var(--border);border-radius:12px;padding:1rem 1.25rem;margin-bottom:.9rem}
@@ -44,7 +44,7 @@
   .field-label{font-size:14px;color:var(--text-primary)}
   .field-label small{display:block;font-size:12px;color:var(--text-secondary)}
   .field-right{display:flex;align-items:center;gap:6px}
-  .field-right input,.acc-input{font-size:14px;padding:6px 10px;border:0.5px solid var(--border-strong);border-radius:var(--radius);background:var(--surface-0);color:var(--text-primary);outline:none;transition:border-color .15s;text-align:right}
+  .field-right input,.acc-unit-input,.acc-input{font-size:14px;padding:6px 10px;border:0.5px solid var(--border-strong);border-radius:var(--radius);background:var(--surface-0);color:var(--text-primary);outline:none;transition:border-color .15s;text-align:right}
   .field-right input{width:110px}
   .field-right input:focus,.acc-input:focus{border-color:var(--border-accent)}
   .currency-tag{font-size:12px;color:var(--text-muted);min-width:22px}
@@ -92,7 +92,7 @@
       <i class="ti ti-scissors" aria-hidden="true"></i>
       Calculadora de prendas
     </div>
-    <div class="bcv-badge loading" id="bcvBadge">
+    <div class="bcv-badge loading" id="bcvBadge" onclick="pedirTasaManual()" title="Haz clic para ingresar la tasa manual si falla la red">
       <i class="ti ti-refresh" aria-hidden="true" id="bcvIcon"></i>
       <span id="bcvText">Consultando BCV...</span>
     </div>
@@ -196,8 +196,9 @@
   </div>
 
   <div class="footer">
-    Tasa BCV oficial vía <a href="https://bcv.today" target="_blank">bcv.today</a> ·
-    <button class="refresh-link" onclick="fetchBCV()">actualizar</button>
+    Tasa BCV oficial / Manual · 
+    <button class="refresh-link" onclick="fetchBCV()">actualizar</button> · 
+    <button class="refresh-link" onclick="pedirTasaManual()">fijar tasa manual</button>
   </div>
 
 </div>
@@ -212,29 +213,24 @@ async function fetchBCV() {
   txt.textContent = 'Consultando BCV...';
   
   try {
-    // Usamos un proxy público de CORS para evitar que el navegador bloquee la petición externa
-    const targetUrl = 'https://bcv.today/api/v1/rate.json';
-    const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(targetUrl);
-    
-    const res = await fetch(proxyUrl, { cache: 'no-cache' });
+    const res = await fetch('https://bcv.today/api/v1/rate.json', { cache: 'no-cache' });
     if (!res.ok) throw new Error('http ' + res.status);
     const data = await res.json();
-    
     const rate = data?.usd?.rate ?? data?.USD?.rate ?? data?.rate ?? null;
     if (!rate || isNaN(rate)) throw new Error('formato inesperado');
     
     tasaBCV = parseFloat(rate);
     const fecha = data?.usd?.date ?? data?.USD?.date ?? '';
     
-    // Guardar en caché local
     localStorage.setItem('tasaBCV_cache', tasaBCV);
     localStorage.setItem('tasaBCV_fecha', fecha);
     
     badge.className = 'bcv-badge';
     txt.innerHTML = '<strong>Bs ' + tasaBCV.toFixed(2) + '</strong> / $1';
     document.getElementById('tasaRef').textContent = 'BCV oficial' + (fecha ? ' · ' + fecha : '');
+    calcular();
   } catch(e) {
-    // Plan B: Intentar rescatar la última tasa guardada en el dispositivo
+    // Intentar caché local
     const tasaGuardada = localStorage.getItem('tasaBCV_cache');
     const fechaGuardada = localStorage.getItem('tasaBCV_fecha');
     
@@ -243,14 +239,42 @@ async function fetchBCV() {
       badge.className = 'bcv-badge';
       txt.innerHTML = '<strong>Bs ' + tasaBCV.toFixed(2) + '</strong> <small>(Guardada)</small>';
       document.getElementById('tasaRef').textContent = 'Última tasa' + (fechaGuardada ? ' · ' + fechaGuardada : '');
+      calcular();
     } else {
-      badge.className = 'bcv-badge error';
-      txt.innerHTML = 'Sin tasa — <button class="refresh-link" onclick="fetchBCV()">reintentar</button>';
-      tasaBCV = null;
-      document.getElementById('tasaRef').textContent = 'tasa BCV no disponible';
+      forzarErrorTasa();
     }
   }
+}
+
+function forzarErrorTasa() {
+  const badge = document.getElementById('bcvBadge');
+  const txt = document.getElementById('bcvText');
+  badge.className = 'bcv-badge error';
+  txt.innerHTML = 'Sin conexión — <u>Ingresar tasa</u>';
+  document.getElementById('tasaRef').textContent = 'tasa no disponible (clic para fijar)';
+  tasaBCV = null;
   calcular();
+}
+
+function pedirTasaManual() {
+  let inputVal = prompt('Ingrese la tasa actual del dólar (Ej: 36.50):', tasaBCV || '');
+  if (inputVal !== null) {
+    let nuevaTasa = parseFloat(inputVal.replace(',', '.'));
+    if (!isNaN(nuevaTasa) && nuevaTasa > 0) {
+      tasaBCV = nuevaTasa;
+      localStorage.setItem('tasaBCV_cache', tasaBCV);
+      localStorage.setItem('tasaBCV_fecha', 'Manual');
+      
+      const badge = document.getElementById('bcvBadge');
+      const txt = document.getElementById('bcvText');
+      badge.className = 'bcv-badge';
+      txt.innerHTML = '<strong>Bs ' + tasaBCV.toFixed(2) + '</strong> <small>(Manual)</small>';
+      document.getElementById('tasaRef').textContent = 'Tasa fijada manualmente';
+      calcular();
+    } else {
+      alert('Por favor ingrese un valor numérico válido.');
+    }
+  }
 }
 
 function getAccesoriosTotal() {
