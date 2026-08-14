@@ -210,17 +210,23 @@ async function fetchBCV() {
   const txt = document.getElementById('bcvText');
   badge.className = 'bcv-badge loading';
   txt.textContent = 'Consultando BCV...';
+  
   try {
-    const res = await fetch('https://bcv.today/api/v1/rate.json', { cache: 'no-cache' });
+    // Usamos un proxy público de CORS para evitar que el navegador bloquee la petición externa
+    const targetUrl = 'https://bcv.today/api/v1/rate.json';
+    const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(targetUrl);
+    
+    const res = await fetch(proxyUrl, { cache: 'no-cache' });
     if (!res.ok) throw new Error('http ' + res.status);
     const data = await res.json();
+    
     const rate = data?.usd?.rate ?? data?.USD?.rate ?? data?.rate ?? null;
     if (!rate || isNaN(rate)) throw new Error('formato inesperado');
     
     tasaBCV = parseFloat(rate);
     const fecha = data?.usd?.date ?? data?.USD?.date ?? '';
     
-    // Almacenamos en caché local para emergencias de conectividad
+    // Guardar en caché local
     localStorage.setItem('tasaBCV_cache', tasaBCV);
     localStorage.setItem('tasaBCV_fecha', fecha);
     
@@ -228,7 +234,7 @@ async function fetchBCV() {
     txt.innerHTML = '<strong>Bs ' + tasaBCV.toFixed(2) + '</strong> / $1';
     document.getElementById('tasaRef').textContent = 'BCV oficial' + (fecha ? ' · ' + fecha : '');
   } catch(e) {
-    // Si falla la red o el servicio, recuperamos la última tasa guardada
+    // Plan B: Intentar rescatar la última tasa guardada en el dispositivo
     const tasaGuardada = localStorage.getItem('tasaBCV_cache');
     const fechaGuardada = localStorage.getItem('tasaBCV_fecha');
     
