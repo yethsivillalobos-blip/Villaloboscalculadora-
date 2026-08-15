@@ -1,11 +1,10 @@
 const CACHE_CALC = 'calculadora-textil-v1';
-
 const recursosCalc = [
   './',
   './index.html',
   './manifest.json',
-  './assets/icons/wolf-icon-192x192.png',
-  './assets/icons/wolf-icon-512x512.png'
+  './wolf-192.png',
+  './wolf-512.png'
 ];
 
 self.addEventListener('install', event => {
